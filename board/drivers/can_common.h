@@ -160,6 +160,16 @@ bool can_check_checksum(CANPacket_t *packet) {
 
 void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook) {
   if (skip_tx_hook || safety_tx_hook(to_push) != 0) {
+    bool consumed = false;
+    if (!skip_tx_hook) {
+      // RX IRQs must never observe a partially updated display cache.
+      ENTER_CRITICAL();
+      consumed = safety_tx_consumed_hook(to_push);
+      EXIT_CRITICAL();
+    }
+    if (consumed) {
+      return;  // valid display-cache update, not a physical CAN transmission
+    }
     if (bus_number < PANDA_CAN_CNT) {
       // add CAN packet to send queue
       tx_buffer_overflow += can_push(can_queues[bus_number], to_push) ? 0U : 1U;
